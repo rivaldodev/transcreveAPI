@@ -33,7 +33,8 @@ EXPOSE 5000
 
 ENTRYPOINT ["dumb-init", "--"]
 
+ENV PORT=5000
 ENV WORKERS=4
 ENV LOGLEVEL="info"
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 main:app --workers ${WORKERS} --log-level ${LOGLEVEL}"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} main:app --workers ${WORKERS} --log-level ${LOGLEVEL}"]

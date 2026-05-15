@@ -1,92 +1,89 @@
-# API de Transcrição de Áudio para Texto
+# API de transcricao de audio para texto
 
-Uma API simples criada com Python Flask e a biblioteca SpeechRecognition para transcrever arquivos de áudio em texto.
+API Flask simples que recebe audio por requisicao HTTP e usa `SpeechRecognition`
+para transcrever em portugues do Brasil.
 
-**ATENÇÃO: Esse projeto é apenas um "wrapper" que utiliza a lib SpeechRecognition e se comunica com a api pública do Google pra fazer as transcrições gratuitamente.**
+Atencao: este projeto usa a biblioteca `SpeechRecognition`, que se comunica com
+o servico publico do Google para fazer as transcricoes.
 
-## Deploy
+## Deploy no Coolify
 
-### Requisitos para executar localmente
+Use o deploy por Docker Compose. O arquivo `docker-compose.yaml` nao publica uma
+porta fixa no host; ele apenas expoe a porta interna do container para o proxy do
+Coolify.
 
-Antes de usar a API, certifique-se de ter instalado as dependências do projeto usando o seguinte comando:
+Variaveis uteis:
 
-```pip install -r requirements.txt```
+- `PORT`: porta interna usada pelo Gunicorn. Padrao: `5000`.
+- `ALLOWED_IPS`: lista opcional de IPs separados por virgula.
+- `MAX_CONTENT_LENGTH_MB`: tamanho maximo do upload em MB. Padrao: `50`.
+- `WORKERS`: quantidade de workers do Gunicorn. Padrao: `4`.
+- `LOGLEVEL`: nivel de log do Gunicorn. Padrao: `info`.
 
-**Também instale o FFMPEG!**
+No Coolify, configure o dominio apontando para a porta interna `5000`, ou altere
+`PORT` se quiser usar outra porta interna.
 
-abra o `main.py` e descomente esse trecho abaixo no fim do arquivo:
-```python
-#if __name__ == '__main__':
-#     app.run(host='0.0.0.0', port=5000)
-```
+## Executar com Docker localmente
 
-execute no terminal (ou cmd):
 ```bash
-python main.py #para windows
+docker compose up --build
 ```
-ou
+
+Para acessar localmente sem Coolify, publique uma porta manualmente:
+
 ```bash
-python3 main.py #para linux
+docker run --rm -p 5000:5000 transcreve-api:latest
 ```
 
-### Requisitos para executar via Docker
-execute o comando abaixo na raiz do projeto para fazer build da imagem Docker:
+## Executar sem Docker
+
+Instale as dependencias:
+
 ```bash
-docker build -t transcreve-api:latest .
+pip install -r requirements.txt
 ```
 
-Depois, execute esse comando pra iniciar o container:
+Tambem instale o `ffmpeg` no sistema.
+
+Depois execute:
+
 ```bash
-docker run -p 5000:5000 transcreve-api:latest
-```
-Assim o container irá iniciar anexado ao console atual, e ouvirá na porta `5000`
-
-para encerrar o container, use `ctrl+c` no console atual
-
-
-## Endpoint
-
-A API possui um único endpoint em `/transcrever`, que pode ser usado para enviar arquivos de áudio para transcrição.
-
-Para enviar um arquivo de áudio para transcrição, faça uma solicitação HTTP POST para o endpoint `/transcrever` com o arquivo de áudio como dados do formulário multipart.
-
-Por exemplo, usando o comando `curl` no terminal:
-
-```
-curl -X POST -F 'audio=@/path/to/audio.wav' http://localhost:5000/transcrever
+python main.py
 ```
 
+## Endpoints
 
-ou usando NodeJS Axios:
-```js
-var axios = require('axios');
-var FormData = require('form-data');
-var fs = require('fs');
-var data = new FormData();
-data.append('audio', fs.createReadStream('@/path/to/audio.wav'));
+### `GET /health`
 
-var config = {
-    method: 'post',
-    maxBodyLength: Infinity,
-    url: 'http://localhost:5000/transcrever',
-    headers: { 
-        ...data.getHeaders()
-    },
-    data : data
-};
+Retorna o status da API.
 
-axios(config)
-    .then(function (response) {
-        console.log(JSON.stringify(response.data));
-    })
-    .catch(function (error) {
-        console.log(error);
-    });
+### `POST /transcrever`
+
+Aceita arquivos WAV, OGG e MP3.
+
+Envio multipart usando o campo `audio`:
+
+```bash
+curl -X POST -F "audio=@/path/to/audio.wav" http://localhost:5000/transcrever
 ```
 
+Tambem aceita o campo `file`:
 
-Isso enviará um arquivo de áudio `audio.wav` localizado em `/path/to/` para o endpoint `/transcrever` da API. Se o arquivo for um arquivo WAV válido, a API transcreverá o áudio em texto e retornará a transcrição como uma resposta HTTP 200 OK. Se o arquivo enviado não for um arquivo válido, a API retornará um JSON com uma mensagem de erro indicando que apenas arquivos WAV, OGG e MP3 são permitidos.
+```bash
+curl -X POST -F "file=@/path/to/audio.mp3" http://localhost:5000/transcrever
+```
 
-## Contribuindo
+Ou envio do audio como corpo bruto da requisicao:
 
-Sinta-se à vontade para copiar ou contribuir com a API criando pull requests.
+```bash
+curl -X POST \
+  -H "Content-Type: audio/wav" \
+  --data-binary "@/path/to/audio.wav" \
+  http://localhost:5000/transcrever
+```
+
+Resposta de sucesso em texto puro:
+
+```text
+texto transcrito
+```

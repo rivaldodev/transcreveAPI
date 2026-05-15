@@ -1,120 +1,177 @@
-# transcreveAPI/main.py
-from flask import Flask, request
-import speech_recognition as sr
-from pydub import AudioSegment
+from datetime import datetime
 from functools import wraps
 import io
 import logging
 import os
-from datetime import datetime
+
+from flask import Flask, request
+from pydub import AudioSegment
+import speech_recognition as sr
 
 app = Flask(__name__)
 
-# Configuração do logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-# Pegar IPs permitidos da variável de ambiente e remover espaços em branco
-raw_ips = os.getenv('ALLOWED_IPS', '').strip()
-ALLOWED_IPS = {ip.strip() for ip in raw_ips.split(',') if ip.strip(
-)} if raw_ips else None  # None significa "qualquer IP é permitido"
+max_content_length_mb = int(os.getenv("MAX_CONTENT_LENGTH_MB", "50"))
+app.config["MAX_CONTENT_LENGTH"] = max_content_length_mb * 1024 * 1024
 
-logging.info(f"IPs permitidos: {ALLOWED_IPS if ALLOWED_IPS else 'Todos'}")
+raw_ips = os.getenv("ALLOWED_IPS", "").strip()
+ALLOWED_IPS = {ip.strip() for ip in raw_ips.split(",") if ip.strip()} if raw_ips else None
+
+logging.info("IPs permitidos: %s", ALLOWED_IPS if ALLOWED_IPS else "Todos")
+
+SUPPORTED_CONTENT_TYPES = {
+    "audio/wav": "wav",
+    "audio/wave": "wav",
+    "audio/x-wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/mp3": "mp3",
+    "audio/mpeg": "mp3",
+}
+
+SUPPORTED_EXTENSIONS = {
+    ".wav": "wav",
+    ".ogg": "ogg",
+    ".mp3": "mp3",
+}
+
+
+def request_client_ip():
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.remote_addr
 
 
 def check_ip(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        request_ip = request.headers.get(
-            'X-Forwarded-For', request.remote_addr)
+        request_ip = request_client_ip()
 
-        # Se ALLOWED_IPS for None, permite qualquer IP
         if ALLOWED_IPS is not None and request_ip not in ALLOWED_IPS:
-            logging.warning(
-                f"Tentativa de acesso não autorizada do IP: {request_ip}")
-            return 'Acesso não autorizado', 403
+            logging.warning("Tentativa de acesso nao autorizada do IP: %s", request_ip)
+            return {"erro": "Acesso nao autorizado"}, 403
 
-        logging.info(f"Acesso autorizado do IP: {request_ip}")
         return f(*args, **kwargs)
 
     return decorated_function
 
 
+def detect_audio_format(file_storage=None):
+    if file_storage:
+        content_type = (file_storage.content_type or "").lower()
+        if content_type in SUPPORTED_CONTENT_TYPES:
+            return SUPPORTED_CONTENT_TYPES[content_type]
+
+        _, extension = os.path.splitext(file_storage.filename or "")
+        extension = extension.lower()
+        if extension in SUPPORTED_EXTENSIONS:
+            return SUPPORTED_EXTENSIONS[extension]
+
+    request_content_type = (request.content_type or "").split(";")[0].lower()
+    return SUPPORTED_CONTENT_TYPES.get(request_content_type)
+
+
+def read_audio_from_request():
+    file_storage = request.files.get("audio") or request.files.get("file")
+
+    if file_storage:
+        audio_bytes = file_storage.read()
+        audio_format = detect_audio_format(file_storage)
+    else:
+        audio_bytes = request.get_data()
+        audio_format = detect_audio_format()
+
+    if not audio_bytes:
+        return None, None
+
+    return audio_bytes, audio_format
+
+
+def to_wav_io(audio_bytes, audio_format):
+    if audio_format == "wav":
+        return io.BytesIO(audio_bytes)
+
+    audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=audio_format)
+    audio = audio.set_frame_rate(16000).set_channels(1)
+
+    wav_io = io.BytesIO()
+    audio.export(wav_io, format="wav")
+    wav_io.seek(0)
+    return wav_io
+
+
 @app.before_request
 def log_request_info():
-    logging.info(f"Request IP: {request.remote_addr}")
-    logging.info(f"Headers: {dict(request.headers)}")
+    logging.info("Request IP: %s", request_client_ip())
+    logging.info("Content-Type: %s", request.content_type)
 
 
-@app.route('/', methods=['GET'])
+@app.route("/", methods=["GET"])
 @check_ip
 def home():
-    return '<center><h1>[POST] /transcrever with "audio" form file (wav, ogg, mp3)</h1></center>'
+    return {
+        "status": "ok",
+        "endpoints": {
+            "health": "/health",
+            "transcrever": 'POST /transcrever com arquivo multipart nos campos "audio" ou "file"',
+        },
+    }
 
 
-@app.route('/transcrever', methods=['POST'])
+@app.route("/health", methods=["GET"])
+def health():
+    return {"status": "ok"}, 200
+
+
+@app.route("/transcrever", methods=["POST"])
 @check_ip
 def transcrever():
-    request_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    request_ip = request.remote_addr
+    request_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    request_ip = request_client_ip()
 
-    logging.info(f"Requisição recebida do IP: {request_ip}")
+    logging.info("Requisicao recebida do IP: %s", request_ip)
 
-    if 'audio' not in request.files:
-        logging.error(
-            f"{request_time} - Nenhum arquivo de áudio enviado - IP: {request_ip}")
-        return 'Nenhum arquivo de áudio enviado', 400
+    audio_bytes, audio_format = read_audio_from_request()
+    if not audio_bytes:
+        logging.error("%s - Nenhum arquivo de audio enviado - IP: %s", request_time, request_ip)
+        return {"erro": "Nenhum arquivo de audio enviado"}, 400
 
-    audio_file = request.files['audio']
-    if not audio_file:
-        logging.error(
-            f"{request_time} - Arquivo de áudio inválido - IP: {request_ip}")
-        return 'Arquivo de áudio inválido', 400
-
-    content_type = audio_file.content_type
-    if content_type not in ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/ogg', 'audio/mp3']:
-        logging.error(
-            f"{request_time} - Tipo de arquivo não suportado: {content_type} - IP: {request_ip}")
-        return {'erro': 'Apenas arquivos WAV, OGG e MP3 são permitidos'}, 400
+    if audio_format not in {"wav", "ogg", "mp3"}:
+        logging.error("%s - Tipo de arquivo nao suportado - IP: %s", request_time, request_ip)
+        return {"erro": "Apenas arquivos WAV, OGG e MP3 sao permitidos"}, 400
 
     try:
-        if content_type in ['audio/ogg', 'audio/mp3']:
-            audio = AudioSegment.from_file(io.BytesIO(
-                audio_file.read()), format=content_type.split('/')[1])
-            audio = audio.set_frame_rate(16000).set_channels(
-                1)  # Ajuste a taxa de amostragem e canais
-            wav_io = io.BytesIO()
-            audio.export(wav_io, format='wav')
-            wav_io.seek(0)
-            audio_file = wav_io
+        wav_io = to_wav_io(audio_bytes, audio_format)
 
         recognizer = sr.Recognizer()
-        with sr.AudioFile(audio_file) as source:
+        with sr.AudioFile(wav_io) as source:
             audio_data = recognizer.record(source)
 
-        transcribed_text = recognizer.recognize_google(
-            audio_data, language='pt-BR')
+        transcribed_text = recognizer.recognize_google(audio_data, language="pt-BR")
 
-        logging.info(
-            f"{request_time} - Transcrição bem-sucedida: {transcribed_text} - IP: {request_ip}")
+        logging.info("%s - Transcricao bem-sucedida - IP: %s", request_time, request_ip)
         return transcribed_text, 200
 
     except sr.UnknownValueError:
-        logging.error(
-            f"{request_time} - Não foi possível reconhecer o áudio - IP: {request_ip}")
-        return 'Não foi possível reconhecer o áudio', 400
+        logging.error("%s - Nao foi possivel reconhecer o audio - IP: %s", request_time, request_ip)
+        return {"erro": "Nao foi possivel reconhecer o audio"}, 400
     except sr.RequestError as e:
         logging.error(
-            f"{request_time} - Erro ao se comunicar com o serviço de reconhecimento de fala: {e} - IP: {request_ip}")
-        return 'Erro ao se comunicar com o serviço de reconhecimento de fala', 500
+            "%s - Erro ao se comunicar com o servico de reconhecimento de fala: %s - IP: %s",
+            request_time,
+            e,
+            request_ip,
+        )
+        return {"erro": "Erro ao se comunicar com o servico de reconhecimento de fala"}, 500
     except Exception as e:
-        logging.error(
-            f"{request_time} - Erro inesperado: {e} - IP: {request_ip}")
-        return 'Erro interno no servidor', 500
+        logging.exception("%s - Erro inesperado: %s - IP: %s", request_time, e, request_ip)
+        return {"erro": "Erro interno no servidor"}, 500
 
 
-# if __name__ == '__main__':
-#     app.run(host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
