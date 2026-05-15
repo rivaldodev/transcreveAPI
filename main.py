@@ -3,9 +3,11 @@ from functools import wraps
 import io
 import logging
 import os
+import tempfile
 
 from flask import Flask, request
 from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
 import speech_recognition as sr
 
 app = Flask(__name__)
@@ -96,13 +98,27 @@ def to_wav_io(audio_bytes, audio_format):
     if audio_format == "wav":
         return io.BytesIO(audio_bytes)
 
-    audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=audio_format)
-    audio = audio.set_frame_rate(16000).set_channels(1)
+    input_path = None
+    output_path = None
 
-    wav_io = io.BytesIO()
-    audio.export(wav_io, format="wav")
-    wav_io.seek(0)
-    return wav_io
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{audio_format}") as input_file:
+            input_file.write(audio_bytes)
+            input_path = input_file.name
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as output_file:
+            output_path = output_file.name
+
+        audio = AudioSegment.from_file(input_path, format=audio_format)
+        audio = audio.set_frame_rate(16000).set_channels(1)
+        audio.export(output_path, format="wav")
+
+        with open(output_path, "rb") as wav_file:
+            return io.BytesIO(wav_file.read())
+    finally:
+        for path in (input_path, output_path):
+            if path and os.path.exists(path):
+                os.remove(path)
 
 
 @app.before_request
@@ -168,6 +184,9 @@ def transcrever():
             request_ip,
         )
         return {"erro": "Erro ao se comunicar com o servico de reconhecimento de fala"}, 500
+    except CouldntDecodeError:
+        logging.exception("%s - Nao foi possivel decodificar o audio - IP: %s", request_time, request_ip)
+        return {"erro": "Nao foi possivel decodificar o audio enviado"}, 400
     except Exception as e:
         logging.exception("%s - Erro inesperado: %s - IP: %s", request_time, e, request_ip)
         return {"erro": "Erro interno no servidor"}, 500
