@@ -59,7 +59,7 @@ Retorna o status da API.
 
 ### `POST /transcrever`
 
-Aceita arquivos WAV, OGG e MP3.
+Aceita arquivos WAV, OGG, MP3 e M4A.
 
 Envio multipart usando o campo `audio`:
 

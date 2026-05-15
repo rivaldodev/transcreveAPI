@@ -33,12 +33,17 @@ SUPPORTED_CONTENT_TYPES = {
     "audio/ogg": "ogg",
     "audio/mp3": "mp3",
     "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/m4a": "m4a",
+    "audio/x-m4a": "m4a",
 }
 
 SUPPORTED_EXTENSIONS = {
     ".wav": "wav",
     ".ogg": "ogg",
     ".mp3": "mp3",
+    ".m4a": "m4a",
+    ".mp4": "m4a",
 }
 
 
@@ -78,6 +83,18 @@ def detect_audio_format(file_storage=None):
     return SUPPORTED_CONTENT_TYPES.get(request_content_type)
 
 
+def detect_audio_format_from_bytes(audio_bytes):
+    if audio_bytes.startswith(b"RIFF") and audio_bytes[8:12] == b"WAVE":
+        return "wav"
+    if audio_bytes.startswith(b"OggS"):
+        return "ogg"
+    if audio_bytes.startswith(b"ID3") or audio_bytes[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+        return "mp3"
+    if len(audio_bytes) > 12 and audio_bytes[4:8] == b"ftyp":
+        return "m4a"
+    return None
+
+
 def read_audio_from_request():
     file_storage = request.files.get("audio") or request.files.get("file")
 
@@ -90,6 +107,10 @@ def read_audio_from_request():
 
     if not audio_bytes:
         return None, None
+
+    detected_format = detect_audio_format_from_bytes(audio_bytes)
+    if detected_format:
+        audio_format = detected_format
 
     return audio_bytes, audio_format
 
@@ -109,7 +130,10 @@ def to_wav_io(audio_bytes, audio_format):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as output_file:
             output_path = output_file.name
 
-        audio = AudioSegment.from_file(input_path, format=audio_format)
+        try:
+            audio = AudioSegment.from_file(input_path)
+        except CouldntDecodeError:
+            audio = AudioSegment.from_file(input_path, format=audio_format)
         audio = audio.set_frame_rate(16000).set_channels(1)
         audio.export(output_path, format="wav")
 
@@ -157,9 +181,9 @@ def transcrever():
         logging.error("%s - Nenhum arquivo de audio enviado - IP: %s", request_time, request_ip)
         return {"erro": "Nenhum arquivo de audio enviado"}, 400
 
-    if audio_format not in {"wav", "ogg", "mp3"}:
+    if audio_format not in {"wav", "ogg", "mp3", "m4a"}:
         logging.error("%s - Tipo de arquivo nao suportado - IP: %s", request_time, request_ip)
-        return {"erro": "Apenas arquivos WAV, OGG e MP3 sao permitidos"}, 400
+        return {"erro": "Apenas arquivos WAV, OGG, MP3 e M4A sao permitidos"}, 400
 
     try:
         wav_io = to_wav_io(audio_bytes, audio_format)
