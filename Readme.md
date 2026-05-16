@@ -16,8 +16,19 @@ Variaveis uteis:
 
 - `PORT`: porta interna usada pelo Gunicorn. Padrao: `5000`.
 - `ALLOWED_IPS`: lista opcional de IPs separados por virgula.
-- `MAX_CONTENT_LENGTH_MB`: tamanho maximo do upload em MB. Padrao: `50`.
-- `WORKERS`: quantidade de workers do Gunicorn. Padrao: `4`.
+- `MAX_CONTENT_LENGTH_MB`: tamanho maximo do upload em MB. Padrao: `2048`.
+- `WORKERS`: quantidade de workers do Gunicorn. Padrao: `16`.
+- `THREADS`: threads por worker. Padrao: `2`.
+- `TIMEOUT`: timeout de cada request em segundos. Padrao: `3600`.
+- `GRACEFUL_TIMEOUT`: tempo para shutdown gracioso dos workers. Padrao: `300`.
+- `KEEP_ALIVE`: keep-alive HTTP do Gunicorn. Padrao: `5`.
+- `MAX_REQUESTS`: reinicia workers depois desta quantidade de requests. Padrao: `1000`.
+- `MAX_REQUESTS_JITTER`: variacao aleatoria do `MAX_REQUESTS`. Padrao: `100`.
+- `WORKER_TMP_DIR`: diretorio temporario dos workers Gunicorn. Padrao: `/dev/shm`.
+- `TMPFS_SIZE`: tamanho do `/tmp` em memoria para conversoes do ffmpeg. Padrao: `8G`.
+- `SHM_SIZE`: tamanho de `/dev/shm`. Padrao: `2G`.
+- `MEMORY_LIMIT`: limite de memoria no compose. Padrao: `48G`.
+- `MEMORY_RESERVATION`: reserva de memoria no compose. Padrao: `16G`.
 - `LOGLEVEL`: nivel de log do Gunicorn. Padrao: `info`.
 
 No Coolify, configure o dominio apontando para a porta interna `5000`, ou altere

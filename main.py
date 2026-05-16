@@ -18,7 +18,16 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-max_content_length_mb = int(os.getenv("MAX_CONTENT_LENGTH_MB", "50"))
+
+def get_int_env(name, default):
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        logging.warning("Valor invalido para %s. Usando padrao: %s", name, default)
+        return default
+
+
+max_content_length_mb = get_int_env("MAX_CONTENT_LENGTH_MB", 2048)
 app.config["MAX_CONTENT_LENGTH"] = max_content_length_mb * 1024 * 1024
 
 raw_ips = os.getenv("ALLOWED_IPS", "").strip()

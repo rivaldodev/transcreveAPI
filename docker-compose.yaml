@@ -12,10 +12,20 @@ services:
       PYTHONPATH: /transcreve-api/venv
       PORT: ${PORT:-5000}
       ALLOWED_IPS: ${ALLOWED_IPS:-}
-      MAX_CONTENT_LENGTH_MB: ${MAX_CONTENT_LENGTH_MB:-50}
+      MAX_CONTENT_LENGTH_MB: ${MAX_CONTENT_LENGTH_MB:-2048}
+      WORKERS: ${WORKERS:-16}
+      THREADS: ${THREADS:-2}
+      TIMEOUT: ${TIMEOUT:-3600}
+      GRACEFUL_TIMEOUT: ${GRACEFUL_TIMEOUT:-300}
+      KEEP_ALIVE: ${KEEP_ALIVE:-5}
+      MAX_REQUESTS: ${MAX_REQUESTS:-1000}
+      MAX_REQUESTS_JITTER: ${MAX_REQUESTS_JITTER:-100}
     volumes:
       - uploads:/transcreve-api/uploads
       - logs:/transcreve-api/logs
+    tmpfs:
+      - /tmp:size=${TMPFS_SIZE:-8G},mode=1777
+    shm_size: ${SHM_SIZE:-2G}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q http://localhost:$${PORT:-5000}/health || exit 1"]
@@ -26,9 +36,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: ${MEMORY_LIMIT:-48G}
         reservations:
-          memory: 1G
+          memory: ${MEMORY_RESERVATION:-16G}
 
 volumes:
   uploads:
