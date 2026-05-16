@@ -11,7 +11,7 @@ services:
       TZ: America/Sao_Paulo
       PYTHONPATH: /transcreve-api/venv
       PORT: ${PORT:-5000}
-      ALLOWED_IPS: ${ALLOWED_IPS:-}
+      API_TOKEN: ${API_TOKEN:-}
       MAX_CONTENT_LENGTH_MB: ${MAX_CONTENT_LENGTH_MB:-2048}
       WORKERS: ${WORKERS:-16}
       THREADS: ${THREADS:-2}

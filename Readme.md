@@ -15,7 +15,7 @@ Coolify.
 Variaveis uteis:
 
 - `PORT`: porta interna usada pelo Gunicorn. Padrao: `5000`.
-- `ALLOWED_IPS`: lista opcional de IPs separados por virgula.
+- `API_TOKEN`: token obrigatorio usado para proteger os endpoints `/` e `/transcrever`.
 - `MAX_CONTENT_LENGTH_MB`: tamanho maximo do upload em MB. Padrao: `2048`.
 - `WORKERS`: quantidade de workers do Gunicorn. Padrao: `16`.
 - `THREADS`: threads por worker. Padrao: `2`.
@@ -72,22 +72,32 @@ Retorna o status da API.
 
 Aceita arquivos WAV, OGG, MP3 e M4A.
 
+Envie o token configurado em `API_TOKEN` no header
+`Authorization: Bearer seu-token` ou `X-API-Token: seu-token`.
+
 Envio multipart usando o campo `audio`:
 
 ```bash
-curl -X POST -F "audio=@/path/to/audio.wav" http://localhost:5000/transcrever
+curl -X POST \
+  -H "Authorization: Bearer seu-token" \
+  -F "audio=@/path/to/audio.wav" \
+  http://localhost:5000/transcrever
 ```
 
 Tambem aceita o campo `file`:
 
 ```bash
-curl -X POST -F "file=@/path/to/audio.mp3" http://localhost:5000/transcrever
+curl -X POST \
+  -H "Authorization: Bearer seu-token" \
+  -F "file=@/path/to/audio.mp3" \
+  http://localhost:5000/transcrever
 ```
 
 Ou envio do audio como corpo bruto da requisicao:
 
 ```bash
 curl -X POST \
+  -H "Authorization: Bearer seu-token" \
   -H "Content-Type: audio/wav" \
   --data-binary "@/path/to/audio.wav" \
   http://localhost:5000/transcrever

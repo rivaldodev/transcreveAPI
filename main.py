@@ -1,5 +1,6 @@
 from datetime import datetime
 from functools import wraps
+import hmac
 import io
 import logging
 import os
@@ -30,10 +31,12 @@ def get_int_env(name, default):
 max_content_length_mb = get_int_env("MAX_CONTENT_LENGTH_MB", 2048)
 app.config["MAX_CONTENT_LENGTH"] = max_content_length_mb * 1024 * 1024
 
-raw_ips = os.getenv("ALLOWED_IPS", "").strip()
-ALLOWED_IPS = {ip.strip() for ip in raw_ips.split(",") if ip.strip()} if raw_ips else None
+API_TOKEN = os.getenv("API_TOKEN", "").strip()
 
-logging.info("IPs permitidos: %s", ALLOWED_IPS if ALLOWED_IPS else "Todos")
+if API_TOKEN:
+    logging.info("Autenticacao por token ativada")
+else:
+    logging.warning("API_TOKEN nao configurado. Endpoints protegidos recusarao requisicoes.")
 
 SUPPORTED_CONTENT_TYPES = {
     "audio/wav": "wav",
@@ -63,13 +66,23 @@ def request_client_ip():
     return request.remote_addr
 
 
-def check_ip(f):
+def request_token():
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+    return request.headers.get("X-API-Token", "").strip()
+
+
+def require_token(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        request_ip = request_client_ip()
+        if not API_TOKEN:
+            logging.error("API_TOKEN nao configurado; recusando endpoint protegido")
+            return {"erro": "API_TOKEN nao configurado no servidor"}, 500
 
-        if ALLOWED_IPS is not None and request_ip not in ALLOWED_IPS:
-            logging.warning("Tentativa de acesso nao autorizada do IP: %s", request_ip)
+        token = request_token()
+        if not token or not hmac.compare_digest(token, API_TOKEN):
+            logging.warning("Tentativa de acesso nao autorizada do IP: %s", request_client_ip())
             return {"erro": "Acesso nao autorizado"}, 403
 
         return f(*args, **kwargs)
@@ -161,7 +174,7 @@ def log_request_info():
 
 
 @app.route("/", methods=["GET"])
-@check_ip
+@require_token
 def home():
     return {
         "status": "ok",
@@ -178,7 +191,7 @@ def health():
 
 
 @app.route("/transcrever", methods=["POST"])
-@check_ip
+@require_token
 def transcrever():
     request_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     request_ip = request_client_ip()
