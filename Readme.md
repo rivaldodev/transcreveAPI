@@ -16,6 +16,7 @@ Variaveis uteis:
 
 - `PORT`: porta interna usada pelo Gunicorn. Padrao: `5000`.
 - `API_TOKEN`: token obrigatorio usado para proteger os endpoints `/` e `/transcrever`.
+  Aceita um unico token ou varios tokens separados por virgula.
 - `MAX_CONTENT_LENGTH_MB`: tamanho maximo do upload em MB. Padrao: `2048`.
 - `WORKERS`: quantidade de workers do Gunicorn. Padrao: `16`.
 - `THREADS`: threads por worker. Padrao: `2`.
@@ -74,6 +75,9 @@ Aceita arquivos WAV, OGG, MP3 e M4A.
 
 Envie o token configurado em `API_TOKEN` no header
 `Authorization: Bearer seu-token` ou `X-API-Token: seu-token`.
+
+Se `API_TOKEN` tiver varios valores separados por virgula, qualquer um deles
+sera aceito. Exemplo: `API_TOKEN=token-1,token-2,token-3`.
 
 Envio multipart usando o campo `audio`:
 

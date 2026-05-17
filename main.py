@@ -31,9 +31,13 @@ def get_int_env(name, default):
 max_content_length_mb = get_int_env("MAX_CONTENT_LENGTH_MB", 2048)
 app.config["MAX_CONTENT_LENGTH"] = max_content_length_mb * 1024 * 1024
 
-API_TOKEN = os.getenv("API_TOKEN", "").strip()
+API_TOKENS = [
+    token.strip()
+    for token in os.getenv("API_TOKEN", "").split(",")
+    if token.strip()
+]
 
-if API_TOKEN:
+if API_TOKENS:
     logging.info("Autenticacao por token ativada")
 else:
     logging.warning("API_TOKEN nao configurado. Endpoints protegidos recusarao requisicoes.")
@@ -76,12 +80,12 @@ def request_token():
 def require_token(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not API_TOKEN:
+        if not API_TOKENS:
             logging.error("API_TOKEN nao configurado; recusando endpoint protegido")
             return {"erro": "API_TOKEN nao configurado no servidor"}, 500
 
         token = request_token()
-        if not token or not hmac.compare_digest(token, API_TOKEN):
+        if not token or not any(hmac.compare_digest(token, api_token) for api_token in API_TOKENS):
             logging.warning("Tentativa de acesso nao autorizada do IP: %s", request_client_ip())
             return {"erro": "Acesso nao autorizado"}, 403
 
